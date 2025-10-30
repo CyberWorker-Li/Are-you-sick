@@ -52,8 +52,6 @@ verification:
 # 服务器配置
 server:
   port: 8080
-  servlet:
-    context-path: /api
 
 # 日志配置
 logging:

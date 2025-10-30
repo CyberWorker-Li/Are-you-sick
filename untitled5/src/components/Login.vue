@@ -1,5 +1,7 @@
 <template>
-  <div class="form-wrapper">
+  <div class="auth-container">
+    <div class="auth-box">
+      <img :src="logoUrl" alt="Logo" class="auth-logo" />
     <h3 class="form-title">用户登录</h3>
     <p class="form-subtitle">请输入您的账号密码</p>
 
@@ -43,30 +45,37 @@
     </el-form>
 
     <div class="form-links">
-      <el-link type="primary" :underline="false" @click="$emit('switch-to-reset')">忘记密码?</el-link>
-      <el-link type="primary" :underline="false" @click="$emit('switch-to-register')">还没有账号? 立即注册</el-link>
+      <el-link type="primary" :underline="false" @click="router.push({ name: 'ResetPassword' })">忘记密码?</el-link>
+      <el-link type="primary" :underline="false" @click="router.push({ name: 'Register' })">还没有账号? 立即注册</el-link>
     </div>
+  </div>
+
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive } from 'vue';
+import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
+import type { FormInstance, FormRules } from 'element-plus';
 import { User, Lock } from '@element-plus/icons-vue';
+import logo from '../assets/CSS 容器居中问题.png';
+import { useAuthStore } from '../stores/auth';
 
-// 定义 emit 事件，用于通知父组件切换视图
-const emit = defineEmits(['switch-to-register', 'switch-to-reset']);
+const logoUrl = ref(logo);
+const router = useRouter();
 
-const loginFormRef = ref(null);
+const auth = useAuthStore();
+
+const loginFormRef = ref<FormInstance>();
 const loginForm = reactive({
   email: '',
   password: '',
 });
+const loading = ref(false);
 
-// --- 验证规则 ---
-
-// 邮箱验证
-const validateEmail = (rule, value, callback) => {
+// 验证器（和你之前一致）
+const validateEmail = (_: any, value: string, callback: (error?: string | Error) => void) => {
   if (value === '') {
     callback(new Error('请输入邮箱'));
   } else if (!/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(value)) {
@@ -76,8 +85,7 @@ const validateEmail = (rule, value, callback) => {
   }
 };
 
-// 密码验证 (字母, 数字, ., @, _, 最少8位)
-const validatePassword = (rule, value, callback) => {
+const validatePassword = (_: any, value: string, callback: (error?: string | Error) => void) => {
   if (value === '') {
     callback(new Error('请输入密码'));
   } else if (!/^[a-zA-Z0-9.@_]{8,}$/.test(value)) {
@@ -87,33 +95,70 @@ const validatePassword = (rule, value, callback) => {
   }
 };
 
-const loginRules = reactive({
+const loginRules = reactive<FormRules>({
   email: [{ validator: validateEmail, trigger: 'blur' }],
   password: [{ validator: validatePassword, trigger: 'blur' }],
 });
 
-// --- 事件处理 ---
-
-const handleLogin = (formEl) => {
+// 仅负责调用 store.login（组件不处理 axios、token 存储细节）
+const handleLogin = (formEl: FormInstance | undefined) => {
   if (!formEl) return;
-  formEl.validate((valid) => {
-    if (valid) {
-      // 验证通过
-      console.log('Login form valid:', loginForm);
-      // 提示：由于没有后端，我们在这里显示一个成功的提示
-      ElMessage.success('登录成功 (模拟)');
-      // 此处应调用登录接口
-    } else {
-      // 验证失败
+  formEl.validate(async (valid) => {
+    if (!valid) {
       ElMessage.error('输入不合法，请检查');
-      return false;
+      return;
+    }
+
+    loading.value = true;
+    try {
+      // 调用 pinia store 的 login 方法
+      await auth.login({ email: loginForm.email, password: loginForm.password });
+      ElMessage.success('登录成功');
+
+      // 登录后跳转（优先 Home 或 Dashboard，或改成你的主页面）
+      if (router.hasRoute('Home')) {
+        router.push({ name: 'Home' });
+      } else if (router.hasRoute('Dashboard')) {
+        router.push({ name: 'Dashboard' });
+      } else {
+        router.push('/');
+      }
+    } catch (err: any) {
+      console.error('登录失败', err);
+      ElMessage.error(err?.message || '登录失败');
+    } finally {
+      loading.value = false;
     }
   });
 };
 </script>
 
+
 <style scoped>
-/* 通用表单样式 */
+/* 样式与之前相同 */
+.auth-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  /* 完美复刻截图中的浅蓝色渐变背景 */
+  background: linear-gradient(135deg, #f0f8ff 0%, #e6f0ff 100%);
+}
+
+.auth-box {
+  width: 400px;
+  background: #ffffff;
+  padding: 40px;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+  box-sizing: border-box; /* 确保 padding 不会撑大宽度 */
+}
+
+.auth-logo {
+  display: block;
+  width: 110px; /* 根据截图比例设置 */
+  margin: 0 auto 25px auto;
+}
 .form-title {
   text-align: center;
   font-size: 24px;
@@ -133,8 +178,7 @@ const handleLogin = (formEl) => {
   margin-top: 10px;
   font-size: 14px;
 }
-/* Element Plus 样式微调 */
 :deep(.el-input__inner) {
-  height: 40px; /* 统一样式 */
+  height: 40px;
 }
 </style>

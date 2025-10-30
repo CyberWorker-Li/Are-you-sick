@@ -1,21 +1,10 @@
 <template>
   <div class="auth-container">
-    <div class="auth-box">
-      <img :src="logoUrl" alt="Logo" class="auth-logo" />
+    <img :src="logoUrl" alt="Logo" class="auth-logo" />
 
-      <Login
-          v-if="currentView === 'login'"
-          @switch-to-register="currentView = 'register'"
-          @switch-to-reset="currentView = 'reset'"
-      />
-      <Register
-          v-if="currentView === 'register'"
-          @switch-to-login="currentView = 'login'"
-      />
-      <ResetPassword
-          v-if="currentView === 'reset'"
-          @switch-to-login="currentView = 'login'"
-      />
+    <div class="auth-box">
+
+     <router-view/>
     </div>
   </div>
 </template>
@@ -32,6 +21,7 @@ const currentView = ref('login');
 
 // Logo (从您的截图中提取并转为Base64，确保100%一致)
 const logoUrl = ref(logo);
+
 </script>
 
 <style scoped>

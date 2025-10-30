@@ -1,8 +1,8 @@
 <template>
-  <AuthView />
+  <router-view/>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import AuthView from './components/AuthView.vue'
 </script>
 
