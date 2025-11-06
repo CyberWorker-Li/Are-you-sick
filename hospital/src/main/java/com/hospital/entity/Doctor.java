@@ -22,11 +22,22 @@ public class Doctor {
     @Column(length = 20)
     private String phone;
 
+    @Column(name = "department_id")
+    private Long departmentId;
+
     @Column(length = 50)
     private String department;
 
     @Column(length = 50)
     private String title;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "department_id", insertable = false, updatable = false)
+    private Department departmentEntity;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", insertable = false, updatable = false)
+    private User user;
 
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
