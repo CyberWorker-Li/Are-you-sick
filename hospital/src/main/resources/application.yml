@@ -1,0 +1,61 @@
+spring:
+  application:
+    name: hospital-system
+
+  # 数据库配置
+  datasource:
+    url: jdbc:mysql://localhost:3306/hospital_db?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: root
+    password: Mno@1662
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+
+  # JPA配置
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.MySQLDialect
+
+  # 邮件配置
+  mail:
+    host: smtp.qq.com
+    port: 587
+    username: 3233468283@qq.com
+    password: qvlphhpyqtuycjgg
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+    default-encoding: UTF-8
+
+# JWT配置
+jwt:
+  secret: YourSecretKeyForJWTTokenGenerationMustBeLongEnough123456789
+  expiration: 86400000 # 24小时(毫秒)
+
+# 验证码配置
+verification:
+  code:
+    expiration: 60 # 1分钟(秒)
+    length: 6
+
+# 服务器配置
+server:
+  port: 8080
+
+# 日志配置
+logging:
+  level:
+    com.hospital: DEBUG
+    org.springframework.web: INFO
+    org.hibernate: INFO
