@@ -11,6 +11,7 @@ const TOKEN_KEY = 'token';
 export const useAuthStore = defineStore('auth', () => {
     const token = ref<string | null>(localStorage.getItem(TOKEN_KEY));
     const userInfo = ref<UserInfo | null>(null);
+    const role = ref<string | null>(localStorage.getItem('role'));
 
     const isLoggedIn = computed(() => !!token.value);
 
@@ -35,12 +36,18 @@ export const useAuthStore = defineStore('auth', () => {
         }
         setToken(loginData.token);
         userInfo.value = loginData.userInfo ?? null;
+        role.value = loginData.role || null;
+        if (role.value) {
+            localStorage.setItem('role', role.value);
+        }
         return loginData;
     }
 
     function logout() {
         setToken(null);
         userInfo.value = null;
+        role.value = null;
+        localStorage.removeItem('role');
     }
 
     /**
@@ -70,6 +77,7 @@ export const useAuthStore = defineStore('auth', () => {
     return {
         token,
         userInfo,
+        role,
         isLoggedIn,
         setToken,
         login,

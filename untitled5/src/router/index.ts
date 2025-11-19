@@ -5,6 +5,8 @@ import Login from '../components/Login.vue';
 import Register from '../components/Register.vue';
 import ResetPassword from '../components/ResetPassword.vue';
 import PatientDashboard from '../components/PatientDashboard.vue';
+import AdminDashboard from '../components/AdminDashboard1.vue';
+import DoctorDashboard from '../components/DoctorDashboard.vue';
 
 const routes: Array<RouteRecordRaw> = [
     {
@@ -31,7 +33,19 @@ const routes: Array<RouteRecordRaw> = [
         path: '/patient',
         name: 'PatientDashboard',
         component: PatientDashboard,
-        meta: { requiresAuth: true }
+        meta: { requiresAuth: true, role: 'PATIENT' }
+    },
+    {
+        path: '/admin',
+        name: 'AdminDashboard',
+        component: AdminDashboard,
+        meta: { requiresAuth: true, role: 'ADMIN' }
+    },
+    {
+        path: '/doctor',
+        name: 'DoctorDashboard',
+        component: DoctorDashboard,
+        meta: { requiresAuth: true, role: 'DOCTOR' }
     }
 ];
 
@@ -43,12 +57,28 @@ const router = createRouter({
 // 添加路由守卫
 router.beforeEach(async (to, from, next) => {
   const auth = useAuthStore();
-  
   // 如果路由需要认证
   if (to.meta.requiresAuth) {
     // 检查是否已登录
     if (auth.isLoggedIn && auth.userInfo) {
-      next();
+      // 检查角色权限
+      const requiredRole = to.meta.role;
+      const userRole = auth.userInfo?.role || auth.role;
+      
+      if (requiredRole && userRole !== requiredRole) {
+        // 角色不匹配，重定向到对应角色的页面
+        if (userRole === 'ADMIN') {
+          next('/admin');
+        } else if (userRole === 'DOCTOR') {
+          next('/doctor');
+        } else if (userRole === 'PATIENT') {
+          next('/patient');
+        } else {
+          next('/login');
+        }
+      } else {
+        next();
+      }
     } else {
       // 未登录，重定向到登录页
       next('/login');

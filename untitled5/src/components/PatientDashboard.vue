@@ -47,14 +47,63 @@
               />
             </el-form-item>
 
-            <el-form-item label="就诊时间">
-              <el-date-picker
-                v-model="registrationForm.appointmentTime"
-                type="datetime"
-                placeholder="选择就诊时间"
-                :disabled-date="disabledDate"
-                :shortcuts="timeShortcuts"
+            <el-form-item label="患者姓名" required>
+              <el-input
+                v-model="registrationForm.patientName"
+                placeholder="请输入患者姓名"
               />
+            </el-form-item>
+
+            <el-form-item label="联系电话" required>
+              <el-input
+                v-model="registrationForm.patientPhone"
+                placeholder="请输入联系电话"
+                maxlength="20"
+              />
+            </el-form-item>
+
+            <el-form-item label="就诊日期">
+              <el-date-picker
+                v-model="selectedDate"
+                type="date"
+                placeholder="选择就诊日期"
+                :disabled-date="disabledDate"
+                @change="loadAvailableTimeSlots"
+              />
+            </el-form-item>
+
+            <el-form-item label="就诊时间" v-if="availableTimeSlots.length > 0">
+              <el-select v-model="registrationForm.appointmentTime" placeholder="请选择时间段">
+                <el-option
+                  v-for="slot in availableTimeSlots"
+                  :key="slot.startTime"
+                  :label="formatTimeSlot(slot)"
+                  :value="slot.startTime"
+                  :disabled="!slot.available"
+                >
+                  <div
+                    class="time-slot-option"
+                    :class="{
+                      'time-slot-available': slot.available && slot.isWorkingTime,
+                      'time-slot-full': !slot.available && slot.isWorkingTime,
+                      'time-slot-disabled': !slot.isWorkingTime
+                    }"
+                  >
+                    <span class="time-range">{{ formatTimeSlot(slot) }}</span>
+                    <span
+                      v-if="slot.isWorkingTime"
+                      class="time-capacity"
+                      :style="{ color: slot.available ? '#67c23a' : '#f56c6c' }"
+                    >
+                      {{ slot.available ? `剩余${slot.maxPatients - slot.currentPatients}人` : '已满' }}
+                    </span>
+                    <span v-else class="time-capacity disabled">非工作时间</span>
+                  </div>
+                </el-option>
+              </el-select>
+              <div v-if="availableTimeSlots.length === 0 && selectedDate && registrationForm.doctorId" style="color: #909399; margin-top: 8px;">
+                该日期暂无可用时间段
+              </div>
             </el-form-item>
 
             <el-form-item>
@@ -128,13 +177,17 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { useAuthStore } from '../stores/auth';
 import appointmentApi from '../api/appointment';
 import doctorApi from '../api/doctor';
+import scheduleApi from '../api/schedule';
 import type { AppointmentDTO, AppointmentRequest, DoctorDTO } from '../types/dto';
+import type { TimeSlotDTO } from '../api/schedule';
 
 interface RegistrationForm {
   department: string;
   doctorId: number | null;
-  appointmentTime: Date | null;
+  appointmentTime: string | null;
   notes?: string;
+  patientName: string;
+  patientPhone: string;
 }
 
 const router = useRouter();
@@ -159,11 +212,22 @@ const registrationForm = ref<RegistrationForm>({
   department: '',
   doctorId: null,
   appointmentTime: null,
-  notes: ''
+  notes: '',
+  patientName: auth.userInfo?.name || '',
+  patientPhone: auth.userInfo?.phone || ''
 });
 
+const selectedDate = ref<Date | null>(null);
+const availableTimeSlots = ref<TimeSlotDTO[]>([]);
 const appointments = ref<AppointmentDTO[]>([]);
 const loading = ref(false);
+
+const formatDate = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
 // 监听科室变化，加载对应科室的医生
 watch(() => registrationForm.value.department, async (newDepartment) => {
@@ -187,14 +251,61 @@ watch(() => registrationForm.value.department, async (newDepartment) => {
   } else {
     availableDoctors.value = [];
     registrationForm.value.doctorId = null;
+    availableTimeSlots.value = [];
   }
 });
+
+// 监听医生变化，清空时间段
+watch(() => registrationForm.value.doctorId, () => {
+  availableTimeSlots.value = [];
+  registrationForm.value.appointmentTime = null;
+});
+
+// 加载可用时间段
+const loadAvailableTimeSlots = async () => {
+  if (!selectedDate.value || !registrationForm.value.doctorId) {
+    availableTimeSlots.value = [];
+    return;
+  }
+
+  try {
+    loading.value = true;
+    const dateStr = formatDate(selectedDate.value);
+    const response = await scheduleApi.getAvailableTimeSlots(
+      registrationForm.value.doctorId,
+      dateStr
+    );
+    
+    if (response.code === 200 && response.data) {
+      availableTimeSlots.value = response.data;
+    } else {
+      ElMessage.error('加载可用时间段失败: ' + (response.message || '未知错误'));
+      availableTimeSlots.value = [];
+    }
+  } catch (error) {
+    console.error('加载可用时间段异常:', error);
+    ElMessage.error('加载可用时间段失败');
+    availableTimeSlots.value = [];
+  } finally {
+    loading.value = false;
+  }
+};
+
+// 格式化时间段显示
+const formatTimeSlot = (slot: TimeSlotDTO) => {
+  const start = new Date(slot.startTime);
+  const end = new Date(slot.endTime);
+  return `${start.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })} - ${end.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`;
+};
 
 // 计算属性
 const canRegister = computed(() => {
   return registrationForm.value.department && 
          registrationForm.value.doctorId && 
-         registrationForm.value.appointmentTime;
+         registrationForm.value.appointmentTime &&
+         selectedDate.value &&
+         registrationForm.value.patientName &&
+         registrationForm.value.patientPhone;
 });
 
 // 时间选择器配置
@@ -249,8 +360,10 @@ const handleRegistration = async () => {
     const request: AppointmentRequest = {
       patientId: patientId.value,
       doctorId: registrationForm.value.doctorId!,
-      appointmentTime: registrationForm.value.appointmentTime!.toISOString(),
-      notes: registrationForm.value.notes
+      appointmentTime: registrationForm.value.appointmentTime as string,
+      notes: registrationForm.value.notes,
+      patientName: registrationForm.value.patientName,
+      patientPhone: registrationForm.value.patientPhone
     };
 
     const response = await appointmentApi.createAppointment(request);
@@ -258,16 +371,21 @@ const handleRegistration = async () => {
     if (response.code === 200) {
       ElMessage.success('挂号成功！');
       
-      // 重新加载预约列表
+      // 重新加载预约列表与可用时间段
       await loadAppointments();
+      await loadAvailableTimeSlots();
       
       // 重置表单
       registrationForm.value = {
         department: '',
         doctorId: null,
         appointmentTime: null,
-        notes: ''
+        notes: '',
+        patientName: auth.userInfo?.name || '',
+        patientPhone: auth.userInfo?.phone || ''
       };
+      selectedDate.value = null;
+      availableTimeSlots.value = [];
     } else {
       ElMessage.error(response.message || '挂号失败');
     }
@@ -426,6 +544,39 @@ onMounted(async () => {
 
 .notes-text:hover {
   color: #409eff;
+}
+
+:deep(.el-select-dropdown__item .time-slot-option) {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+:deep(.time-slot-option .time-range) {
+  font-weight: 600;
+}
+
+:deep(.time-slot-option .time-capacity) {
+  font-size: 12px;
+}
+
+:deep(.time-slot-option.time-slot-available) {
+  background-color: #f0f9eb;
+  color: #409eff;
+}
+
+:deep(.time-slot-option.time-slot-full) {
+  background-color: #fef0f0;
+  color: #f56c6c;
+}
+
+:deep(.time-slot-option.time-slot-disabled) {
+  background-color: #f4f4f5;
+  color: #c0c4cc;
 }
 
 :deep(.el-form-item__label) {

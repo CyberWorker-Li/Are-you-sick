@@ -66,6 +66,8 @@ export type AppointmentRequest = {
     doctorId: number;
     appointmentTime: string;
     notes?: string;
+    patientName?: string;
+    patientPhone?: string;
 };
 
 export type DoctorDTO = {
