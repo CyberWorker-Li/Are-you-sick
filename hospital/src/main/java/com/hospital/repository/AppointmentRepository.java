@@ -32,9 +32,6 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
     // 查找医生特定状态的预约
     List<Appointment> findByDoctorIdAndStatus(Long doctorId, Appointment.AppointmentStatus status);
     
-    // 检查特定时间段医生是否有预约冲突
-    @Query("SELECT COUNT(a) > 0 FROM Appointment a WHERE a.doctorId = :doctorId " +
-           "AND a.appointmentTime = :appointmentTime AND a.status NOT IN ('CANCELLED', 'EXPIRED')")
-    boolean existsByDoctorIdAndAppointmentTime(@Param("doctorId") Long doctorId, 
-                                              @Param("appointmentTime") LocalDateTime appointmentTime);
+    // 根据医生和时间范围查找预约
+    List<Appointment> findByDoctorIdAndAppointmentTimeBetween(Long doctorId, LocalDateTime start, LocalDateTime end);
 }

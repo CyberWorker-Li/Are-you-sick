@@ -9,4 +9,6 @@ public class AppointmentRequest {
     private Long doctorId;
     private LocalDateTime appointmentTime;
     private String notes;
+    private String patientName;
+    private String patientPhone;
 }

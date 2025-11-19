@@ -1,26 +1,34 @@
-// Admin.java
 package com.hospital.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import java.time.DayOfWeek;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 
 @Data
 @Entity
-@Table(name = "admin")
-public class Admin {
+@Table(name = "schedule")
+public class Schedule {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "user_id", nullable = false, unique = true)
-    private Long userId;
+    @Column(name = "doctor_id", nullable = false)
+    private Long doctorId;
 
-    @Column(nullable = false, length = 50)
-    private String name;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "day_of_week", nullable = false)
+    private DayOfWeek dayOfWeek;
 
-    @Column(length = 20)
-    private String phone;
+    @Column(name = "start_time", nullable = false)
+    private LocalTime startTime;
+
+    @Column(name = "end_time", nullable = false)
+    private LocalTime endTime;
+
+    @Column(name = "max_patients", nullable = false)
+    private Integer maxPatients = 10; // 每个时段最多10人
 
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
@@ -39,3 +47,4 @@ public class Admin {
         updatedAt = LocalDateTime.now();
     }
 }
+

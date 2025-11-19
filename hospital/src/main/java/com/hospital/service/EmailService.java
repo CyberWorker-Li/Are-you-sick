@@ -118,6 +118,26 @@ public class EmailService {
     }
 
     /**
+     * 发送普通邮件
+     */
+    @Async
+    public void sendEmail(String to, String subject, String content) {
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom(fromEmail);
+        message.setTo(to);
+        message.setSubject(subject);
+        message.setText(content);
+        
+        try {
+            mailSender.send(message);
+            log.info("邮件发送成功: to={}, subject={}", to, subject);
+        } catch (Exception e) {
+            log.error("邮件发送失败: to={}, error={}", to, e.getMessage());
+            throw new RuntimeException("邮件发送失败，请稍后重试");
+        }
+    }
+
+    /**
      * 清理过期验证码(定时任务)
      */
     @Transactional

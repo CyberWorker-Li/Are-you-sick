@@ -4,13 +4,14 @@ import com.hospital.dto.AppointmentDTO;
 import com.hospital.dto.AppointmentRequest;
 import com.hospital.entity.Appointment;
 import com.hospital.repository.AppointmentRepository;
+import com.hospital.repository.PatientRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -19,14 +20,21 @@ import java.util.stream.Collectors;
 public class AppointmentServiceImpl implements AppointmentService {
     
     private final AppointmentRepository appointmentRepository;
+    private final PatientRepository patientRepository;
     private final DoctorService doctorService;
+    private final ScheduleService scheduleService;
 
     @Override
     @Transactional
     public Appointment createAppointment(AppointmentRequest request) {
-        // 检查时间冲突
-        if (checkTimeConflict(request.getDoctorId(), request.getAppointmentTime())) {
-            throw new RuntimeException("该时间段医生已有预约，请选择其他时间");
+        // 检查是否在医生的工作时间段内
+        if (!scheduleService.isWithinWorkingHours(request.getDoctorId(), request.getAppointmentTime())) {
+            throw new RuntimeException("该时间段不在医生的工作时间内，请选择医生的工作时间段");
+        }
+        
+        // 检查时间段是否已满员
+        if (scheduleService.isTimeSlotFull(request.getDoctorId(), request.getAppointmentTime())) {
+            throw new RuntimeException("该时间段已满员，请选择其他时间");
         }
         
         Appointment appointment = new Appointment();
@@ -36,7 +44,9 @@ public class AppointmentServiceImpl implements AppointmentService {
         appointment.setNotes(request.getNotes());
         appointment.setStatus(Appointment.AppointmentStatus.PENDING);
         
-        return appointmentRepository.save(appointment);
+        Appointment saved = appointmentRepository.save(appointment);
+        updatePatientContactInfo(request);
+        return saved;
     }
 
     @Override
@@ -101,26 +111,19 @@ public class AppointmentServiceImpl implements AppointmentService {
 
     @Override
     public boolean checkTimeConflict(Long doctorId, LocalDateTime appointmentTime) {
-        return appointmentRepository.existsByDoctorIdAndAppointmentTime(doctorId, appointmentTime);
+        // 对外暴露的冲突检查与排班容量保持一致
+        return scheduleService.isTimeSlotFull(doctorId, appointmentTime);
     }
 
     @Override
     public List<LocalDateTime> getAvailableTimeSlots(Long doctorId, LocalDate date) {
-        // 生成当天的工作时间段 (9:00-17:00, 每30分钟一个时间段)
-        LocalTime startTime = LocalTime.of(9, 0);
-        LocalTime endTime = LocalTime.of(17, 0);
+        // 获取医生在该日期的工作时间段
+        List<com.hospital.dto.TimeSlotDTO> timeSlots = scheduleService.getAvailableTimeSlots(doctorId, date);
         
-        // 生成时间段列表
-        List<LocalTime> timeSlots = new java.util.ArrayList<>();
-        LocalTime currentTime = startTime;
-        while (!currentTime.isAfter(endTime)) {
-            timeSlots.add(currentTime);
-            currentTime = currentTime.plusMinutes(30);
-        }
-        
+        // 只返回可用且未满员的时间段
         return timeSlots.stream()
-                .map(time -> LocalDateTime.of(date, time))
-                .filter(time -> !checkTimeConflict(doctorId, time))
+                .filter(slot -> slot.getAvailable() && slot.getIsWorkingTime())
+                .map(com.hospital.dto.TimeSlotDTO::getStartTime)
                 .collect(Collectors.toList());
     }
 
@@ -149,6 +152,34 @@ public class AppointmentServiceImpl implements AppointmentService {
             }
         }
         
+        // 填充患者信息
+        if (appointment.getPatientId() != null) {
+            patientRepository.findById(appointment.getPatientId()).ifPresent(patient -> {
+                dto.setPatientName(patient.getName());
+                dto.setPatientPhone(patient.getPhone());
+            });
+        }
+        
         return dto;
+    }
+    
+    private void updatePatientContactInfo(AppointmentRequest request) {
+        if (request.getPatientId() == null) {
+            return;
+        }
+        patientRepository.findById(request.getPatientId()).ifPresent(patient -> {
+            boolean updated = false;
+            if (StringUtils.hasText(request.getPatientName()) && !request.getPatientName().equals(patient.getName())) {
+                patient.setName(request.getPatientName());
+                updated = true;
+            }
+            if (StringUtils.hasText(request.getPatientPhone()) && !request.getPatientPhone().equals(patient.getPhone())) {
+                patient.setPhone(request.getPatientPhone());
+                updated = true;
+            }
+            if (updated) {
+                patientRepository.save(patient);
+            }
+        });
     }
 }
