@@ -35,7 +35,8 @@ public class DoctorDashboardController {
     @GetMapping("/appointments/queue")
     public ResponseEntity<ApiResponse<List<AppointmentQueueDTO>>> getAppointmentQueue(
             @RequestParam Long doctorId,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime appointmentTime) {
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime appointmentTime) {
         try {
             List<AppointmentQueueDTO> queue = doctorDashboardService.getAppointmentQueue(doctorId, appointmentTime);
             return ResponseEntity.ok(ApiResponse.success("获取就诊队列成功", queue));

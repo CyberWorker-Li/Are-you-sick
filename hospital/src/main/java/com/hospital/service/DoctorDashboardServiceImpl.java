@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.DayOfWeek;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -38,19 +39,20 @@ public class DoctorDashboardServiceImpl implements DoctorDashboardService {
 
     @Override
     public List<AppointmentQueueDTO> getAppointmentQueue(Long doctorId, LocalDateTime appointmentTime) {
-        // 获取该时间段（30分钟）内的所有预约
-        LocalDateTime slotStart = appointmentTime;
-        LocalDateTime slotEnd = appointmentTime.plusMinutes(30);
-        
         List<Appointment> appointments = appointmentRepository.findByDoctorId(doctorId);
+        LocalDateTime slotStart = determineSlotStart(appointments, appointmentTime, doctorId);
+        if (slotStart == null) {
+            return java.util.Collections.emptyList();
+        }
+        TimeWindow timeWindow = resolveWorkingWindow(doctorId, slotStart);
+        LocalDateTime slotEnd = timeWindow.end();
         
         List<Appointment> filteredAppointments = appointments.stream()
                 .filter(a -> {
                     LocalDateTime aptTime = a.getAppointmentTime();
-                    return !aptTime.isBefore(slotStart) && 
+                    return !aptTime.isBefore(timeWindow.start()) &&
                            aptTime.isBefore(slotEnd) &&
-                           a.getStatus() != Appointment.AppointmentStatus.CANCELLED &&
-                           a.getStatus() != Appointment.AppointmentStatus.EXPIRED;
+                           isActiveAppointment(a);
                 })
                 .sorted(Comparator.comparing(Appointment::getAppointmentTime))
                 .collect(Collectors.toList());
@@ -88,6 +90,188 @@ public class DoctorDashboardServiceImpl implements DoctorDashboardService {
         }
         
         return queue;
+    }
+
+    private boolean isActiveAppointment(Appointment appointment) {
+        return appointment.getStatus() != Appointment.AppointmentStatus.CANCELLED &&
+               appointment.getStatus() != Appointment.AppointmentStatus.EXPIRED;
+    }
+
+    private LocalDateTime findUpcomingOrClosestAppointment(List<Appointment> appointments) {
+        LocalDateTime now = LocalDateTime.now();
+        return findBestMatch(appointments, now);
+    }
+
+    private LocalDateTime findBestMatch(List<Appointment> appointments, LocalDateTime referenceTime) {
+        LocalDateTime upcoming = appointments.stream()
+                .filter(this::isActiveAppointment)
+                .filter(a -> !a.getAppointmentTime().isBefore(referenceTime))
+                .min(Comparator.comparing(Appointment::getAppointmentTime))
+                .map(Appointment::getAppointmentTime)
+                .orElse(null);
+        if (upcoming != null) {
+            return upcoming;
+        }
+
+        return appointments.stream()
+                .filter(this::isActiveAppointment)
+                .max(Comparator.comparing(Appointment::getAppointmentTime))
+                .map(Appointment::getAppointmentTime)
+                .orElse(null);
+    }
+
+    private LocalDateTime determineSlotStart(List<Appointment> appointments,
+                                             LocalDateTime requestedTime,
+                                             Long doctorId) {
+        if (requestedTime != null) {
+            TimeWindow requestedWindow = resolveWorkingWindow(doctorId, requestedTime);
+            if (hasAppointmentsInWindow(appointments, requestedWindow)) {
+                return requestedWindow.start();
+            }
+
+            LocalDateTime closest = findClosestAppointmentForWindow(
+                    appointments,
+                    requestedWindow,
+                    requestedTime
+            );
+            if (closest != null) {
+                TimeWindow alignedWindow = requestedWindow.withDate(closest.toLocalDate());
+                return alignedWindow.start();
+            }
+        }
+
+        return findUpcomingOrClosestAppointment(appointments);
+    }
+
+    private TimeWindow resolveWorkingWindow(Long doctorId, LocalDateTime slotStart) {
+        LocalDateTime windowStart = slotStart;
+        LocalDateTime windowEnd = slotStart.plusMinutes(30);
+        DayOfWeek dayOfWeek = slotStart.getDayOfWeek();
+        LocalTime scheduleStartTime = slotStart.toLocalTime();
+        LocalTime scheduleEndTime = windowEnd.toLocalTime();
+        boolean matchedSchedule = false;
+
+        try {
+            List<ScheduleDTO> schedules = scheduleService.getDoctorSchedulesForWeek(doctorId);
+            for (ScheduleDTO schedule : schedules) {
+                if (schedule.getDayOfWeek() == null || schedule.getStartTime() == null || schedule.getEndTime() == null) {
+                    continue;
+                }
+                if (!schedule.getDayOfWeek().equals(slotStart.getDayOfWeek())) {
+                    continue;
+                }
+
+                LocalTime scheduleStart = schedule.getStartTime();
+                LocalTime scheduleEnd = schedule.getEndTime();
+                LocalTime targetTime = slotStart.toLocalTime();
+
+                if (!targetTime.isBefore(scheduleStart) && targetTime.isBefore(scheduleEnd)) {
+                    windowStart = LocalDateTime.of(slotStart.toLocalDate(), scheduleStart);
+                    windowEnd = LocalDateTime.of(slotStart.toLocalDate(), scheduleEnd);
+                    scheduleStartTime = scheduleStart;
+                    scheduleEndTime = scheduleEnd;
+                    matchedSchedule = true;
+                    break;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+
+        return new TimeWindow(windowStart, windowEnd, dayOfWeek, scheduleStartTime, scheduleEndTime, matchedSchedule);
+    }
+
+    private boolean hasAppointmentsInWindow(List<Appointment> appointments, TimeWindow window) {
+        return appointments.stream()
+                .filter(this::isActiveAppointment)
+                .anyMatch(a -> isWithinWindow(a.getAppointmentTime(), window));
+    }
+
+    private boolean isWithinWindow(LocalDateTime time, TimeWindow window) {
+        return !time.isBefore(window.start()) && time.isBefore(window.end());
+    }
+
+    private LocalDateTime findClosestAppointmentForWindow(List<Appointment> appointments,
+                                                          TimeWindow window,
+                                                          LocalDateTime referenceTime) {
+        if (!window.hasScheduleMeta()) {
+            return null;
+        }
+
+        return appointments.stream()
+                .filter(this::isActiveAppointment)
+                .filter(a -> matchesSchedule(window, a))
+                .min(Comparator.comparingLong(a ->
+                        Math.abs(Duration.between(a.getAppointmentTime(), referenceTime).toMillis())))
+                .map(Appointment::getAppointmentTime)
+                .orElse(null);
+    }
+
+    private boolean matchesSchedule(TimeWindow window, Appointment appointment) {
+        if (!window.hasScheduleMeta()) {
+            return false;
+        }
+        LocalDateTime appointmentTime = appointment.getAppointmentTime();
+        if (appointmentTime.getDayOfWeek() != window.dayOfWeek()) {
+            return false;
+        }
+        LocalTime time = appointmentTime.toLocalTime();
+        return !time.isBefore(window.scheduleStartTime()) && time.isBefore(window.scheduleEndTime());
+    }
+
+    private static class TimeWindow {
+        private final LocalDateTime start;
+        private final LocalDateTime end;
+        private final DayOfWeek dayOfWeek;
+        private final LocalTime scheduleStartTime;
+        private final LocalTime scheduleEndTime;
+        private final boolean hasScheduleMeta;
+
+        private TimeWindow(LocalDateTime start,
+                           LocalDateTime end,
+                           DayOfWeek dayOfWeek,
+                           LocalTime scheduleStartTime,
+                           LocalTime scheduleEndTime,
+                           boolean hasScheduleMeta) {
+            this.start = start;
+            this.end = end;
+            this.dayOfWeek = dayOfWeek;
+            this.scheduleStartTime = scheduleStartTime;
+            this.scheduleEndTime = scheduleEndTime;
+            this.hasScheduleMeta = hasScheduleMeta;
+        }
+
+        public LocalDateTime start() {
+            return start;
+        }
+
+        public LocalDateTime end() {
+            return end;
+        }
+
+        public DayOfWeek dayOfWeek() {
+            return dayOfWeek;
+        }
+
+        public LocalTime scheduleStartTime() {
+            return scheduleStartTime;
+        }
+
+        public LocalTime scheduleEndTime() {
+            return scheduleEndTime;
+        }
+
+        public boolean hasScheduleMeta() {
+            return hasScheduleMeta;
+        }
+
+        public TimeWindow withDate(LocalDate date) {
+            if (!hasScheduleMeta) {
+                return this;
+            }
+            LocalDateTime newStart = LocalDateTime.of(date, scheduleStartTime);
+            LocalDateTime newEnd = LocalDateTime.of(date, scheduleEndTime);
+            return new TimeWindow(newStart, newEnd, date.getDayOfWeek(), scheduleStartTime, scheduleEndTime, true);
+        }
     }
 
     @Override
