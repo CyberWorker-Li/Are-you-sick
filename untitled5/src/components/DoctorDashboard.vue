@@ -36,7 +36,7 @@
               v-model="selectedQueueTime"
               type="datetime"
               placeholder="选择时间段"
-              @change="loadQueue"
+              @change="handleQueueTimeChange"
             />
           </div>
           <el-table :data="queue" v-loading="loading" style="width: 100%">
@@ -167,21 +167,38 @@ const loadSchedules = async () => {
   }
 };
 
-const loadQueue = async () => {
-  if (!selectedQueueTime.value) return;
-  
+const loadQueue = async (options: { autoSelect?: boolean } = {}) => {
+  const shouldAutoSelect = options.autoSelect || !selectedQueueTime.value;
+
   try {
     loading.value = true;
-    const timeStr = selectedQueueTime.value.toISOString();
+    const timeStr = !shouldAutoSelect && selectedQueueTime.value
+      ? selectedQueueTime.value.toISOString()
+      : undefined;
     const response = await doctorDashboardApi.getAppointmentQueue(doctorId.value, timeStr);
     if (response.code === 200) {
       queue.value = response.data || [];
+      if (queue.value.length > 0) {
+        const firstTime = queue.value[0].appointmentTime;
+        if (firstTime) {
+          const firstDate = new Date(firstTime);
+          if (shouldAutoSelect || !selectedQueueTime.value) {
+            selectedQueueTime.value = firstDate;
+          }
+        }
+      } else if (shouldAutoSelect) {
+        selectedQueueTime.value = null;
+      }
     }
   } catch (error) {
     ElMessage.error('加载队列失败');
   } finally {
     loading.value = false;
   }
+};
+
+const handleQueueTimeChange = () => {
+  loadQueue();
 };
 
 const loadAdjustmentRequests = async () => {
@@ -233,9 +250,55 @@ const submitAdjustment = async () => {
   }
 };
 
+const dayOfWeekMap: Record<string, number> = {
+  SUNDAY: 0,
+  MONDAY: 1,
+  TUESDAY: 2,
+  WEDNESDAY: 3,
+  THURSDAY: 4,
+  FRIDAY: 5,
+  SATURDAY: 6
+};
+
+const computeNextOccurrenceDate = (schedule: any) => {
+  if (!schedule?.dayOfWeek) return null;
+  const targetDay = dayOfWeekMap[schedule.dayOfWeek];
+  if (targetDay === undefined) return null;
+
+  const now = new Date();
+  const currentDay = now.getDay();
+  let diff = targetDay - currentDay;
+
+  const scheduleTime = schedule?.startTime || '';
+  const [hourStr = '0', minuteStr = '0'] = scheduleTime.split(':');
+  const scheduleHours = parseInt(hourStr, 10) || 0;
+  const scheduleMinutes = parseInt(minuteStr, 10) || 0;
+
+  if (
+    diff < 0 ||
+    (diff === 0 &&
+      (now.getHours() > scheduleHours ||
+        (now.getHours() === scheduleHours && now.getMinutes() >= scheduleMinutes)))
+  ) {
+    diff += 7;
+  }
+
+  const targetDate = new Date(now);
+  targetDate.setDate(now.getDate() + diff);
+  targetDate.setHours(scheduleHours, scheduleMinutes, 0, 0);
+  return targetDate;
+};
+
 const viewQueue = (schedule: any) => {
   activeTab.value = 'queue';
-  // 可以设置默认时间
+  const targetDate = computeNextOccurrenceDate(schedule);
+  if (targetDate) {
+    selectedQueueTime.value = targetDate;
+    loadQueue({ autoSelect: false });
+  } else {
+    selectedQueueTime.value = null;
+    loadQueue({ autoSelect: true });
+  }
 };
 
 const getStatusType = (status: string) => {

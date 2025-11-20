@@ -7,8 +7,12 @@ export const doctorDashboardApi = {
   },
 
   // 获取就诊队列
-  getAppointmentQueue: async (doctorId: number, appointmentTime: string) => {
-    return await api.get(`/doctor/appointments/queue?doctorId=${doctorId}&appointmentTime=${appointmentTime}`);
+  getAppointmentQueue: async (doctorId: number, appointmentTime?: string) => {
+    const params = new URLSearchParams({ doctorId: doctorId.toString() });
+    if (appointmentTime) {
+      params.append('appointmentTime', appointmentTime);
+    }
+    return await api.get(`/doctor/appointments/queue?${params.toString()}`);
   },
 
   // 发送就诊提醒

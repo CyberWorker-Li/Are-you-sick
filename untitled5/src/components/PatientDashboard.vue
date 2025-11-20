@@ -80,25 +80,13 @@
                   :label="formatTimeSlot(slot)"
                   :value="slot.startTime"
                   :disabled="!slot.available"
+                  :class="['time-slot-option', { 'time-slot-working': slot.isWorkingTime }]"
                 >
-                  <div
-                    class="time-slot-option"
-                    :class="{
-                      'time-slot-available': slot.available && slot.isWorkingTime,
-                      'time-slot-full': !slot.available && slot.isWorkingTime,
-                      'time-slot-disabled': !slot.isWorkingTime
-                    }"
-                  >
-                    <span class="time-range">{{ formatTimeSlot(slot) }}</span>
-                    <span
-                      v-if="slot.isWorkingTime"
-                      class="time-capacity"
-                      :style="{ color: slot.available ? '#67c23a' : '#f56c6c' }"
-                    >
-                      {{ slot.available ? `剩余${slot.maxPatients - slot.currentPatients}人` : '已满' }}
-                    </span>
-                    <span v-else class="time-capacity disabled">非工作时间</span>
-                  </div>
+                  <span :style="{ color: slot.available ? '#409eff' : '#c0c4cc' }">
+                    {{ formatTimeSlot(slot) }}
+                    <span v-if="!slot.available" style="color: #f56c6c;"> (已满)</span>
+                    <span v-else style="color: #67c23a;"> (剩余{{ slot.maxPatients - slot.currentPatients }}人)</span>
+                  </span>
                 </el-option>
               </el-select>
               <div v-if="availableTimeSlots.length === 0 && selectedDate && registrationForm.doctorId" style="color: #909399; margin-top: 8px;">
@@ -546,37 +534,12 @@ onMounted(async () => {
   color: #409eff;
 }
 
-:deep(.el-select-dropdown__item .time-slot-option) {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  width: 100%;
-  padding: 6px 10px;
-  border-radius: 6px;
-  font-size: 14px;
-}
-
-:deep(.time-slot-option .time-range) {
-  font-weight: 600;
-}
-
-:deep(.time-slot-option .time-capacity) {
-  font-size: 12px;
-}
-
-:deep(.time-slot-option.time-slot-available) {
+:deep(.time-slot-option.time-slot-working) {
   background-color: #f0f9eb;
-  color: #409eff;
 }
 
-:deep(.time-slot-option.time-slot-full) {
-  background-color: #fef0f0;
-  color: #f56c6c;
-}
-
-:deep(.time-slot-option.time-slot-disabled) {
-  background-color: #f4f4f5;
-  color: #c0c4cc;
+:deep(.time-slot-option.time-slot-working span) {
+  font-weight: 600;
 }
 
 :deep(.el-form-item__label) {
