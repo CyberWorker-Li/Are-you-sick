@@ -136,3 +136,17 @@ export type AdminDoctorWorkloadDTO = {
     completedAppointments: number;
     pendingAppointments: number;
 };
+
+export type ScheduleAdjustmentRequestDTO = {
+    id: number;
+    doctorId: number;
+    doctorName?: string;
+    dayOfWeek: string;
+    startTime: string;
+    endTime: string;
+    reason?: string;
+    status: string;
+    adminResponse?: string;
+    createdAt?: string;
+    updatedAt?: string;
+};

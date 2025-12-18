@@ -3,7 +3,7 @@ import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import { authApi } from '../api/auth';
 import { userApi } from '../api/user';
-import type { LoginRequestPayload, LoginResponse, UserInfo } from '../types/dto';
+import type { LoginRequestPayload, UserInfo } from '../types/dto';
 import http from '../api/axios';
 
 const TOKEN_KEY = 'token';
@@ -12,6 +12,7 @@ export const useAuthStore = defineStore('auth', () => {
     const token = ref<string | null>(localStorage.getItem(TOKEN_KEY));
     const userInfo = ref<UserInfo | null>(null);
     const role = ref<string | null>(localStorage.getItem('role'));
+    const email = ref<string | null>(localStorage.getItem('user_email'));
 
     const isLoggedIn = computed(() => !!token.value);
 
@@ -37,8 +38,14 @@ export const useAuthStore = defineStore('auth', () => {
         setToken(loginData.token);
         userInfo.value = loginData.userInfo ?? null;
         role.value = loginData.role || null;
+        email.value = loginData.email ?? null;
         if (role.value) {
             localStorage.setItem('role', role.value);
+        }
+        if (email.value) {
+            localStorage.setItem('user_email', email.value);
+        } else {
+            localStorage.removeItem('user_email');
         }
         return loginData;
     }
@@ -47,7 +54,9 @@ export const useAuthStore = defineStore('auth', () => {
         setToken(null);
         userInfo.value = null;
         role.value = null;
+        email.value = null;
         localStorage.removeItem('role');
+        localStorage.removeItem('user_email');
     }
 
     /**
@@ -74,10 +83,38 @@ export const useAuthStore = defineStore('auth', () => {
         }
     }
 
+    const accountIdentifier = computed(() => {
+        if (email.value) {
+            const atIndex = email.value.indexOf('@');
+            return atIndex > 0 ? email.value.slice(0, atIndex) : email.value;
+        }
+        if (userInfo.value?.name) {
+            return userInfo.value.name;
+        }
+        return '用户';
+    });
+
+    const greetingText = computed(() => {
+        const identifier = accountIdentifier.value;
+        switch (role.value) {
+            case 'ADMIN':
+                return `系统管理员${identifier}`;
+            case 'DOCTOR':
+                return `欢迎，医生${identifier}`;
+            case 'PATIENT':
+                return `欢迎，用户${identifier}`;
+            default:
+                return `欢迎，${identifier}`;
+        }
+    });
+
     return {
         token,
         userInfo,
         role,
+        email,
+        accountIdentifier,
+        greetingText,
         isLoggedIn,
         setToken,
         login,

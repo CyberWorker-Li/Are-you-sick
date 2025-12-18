@@ -3,7 +3,7 @@
     <div class="header">
       <h1>患者挂号系统</h1>
       <div class="user-info">
-        <span>欢迎，{{ userEmail }}</span>
+        <span>{{ userGreeting }}</span>
         <el-button type="danger" size="small" @click="handleLogout">退出登录</el-button>
       </div>
     </div>
@@ -18,9 +18,9 @@
               <el-select v-model="registrationForm.department" placeholder="请选择科室">
                 <el-option
                   v-for="dept in departments"
-                  :key="dept.value"
-                  :label="dept.label"
-                  :value="dept.value"
+                  :key="dept.id"
+                  :label="dept.name"
+                  :value="dept.id"
                 />
               </el-select>
             </el-form-item>
@@ -165,12 +165,13 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { useAuthStore } from '../stores/auth';
 import appointmentApi from '../api/appointment';
 import doctorApi from '../api/doctor';
+import departmentApi from '../api/department';
 import scheduleApi from '../api/schedule';
-import type { AppointmentDTO, AppointmentRequest, DoctorDTO } from '../types/dto';
+import type { AppointmentDTO, AppointmentRequest, DepartmentDTO, DoctorDTO } from '../types/dto';
 import type { TimeSlotDTO } from '../api/schedule';
 
 interface RegistrationForm {
-  department: string;
+  department: number | null;
   doctorId: number | null;
   appointmentTime: string | null;
   notes?: string;
@@ -180,24 +181,17 @@ interface RegistrationForm {
 
 const router = useRouter();
 const auth = useAuthStore();
-
-const userEmail = ref(auth.userInfo?.name || '用户');
+const userGreeting = computed(() => auth.greetingText);
 const patientId = ref(auth.userInfo?.id || 0);
 
 // 真实数据
-const departments = ref([
-  { value: '内科', label: '内科' },
-  { value: '外科', label: '外科' },
-  { value: '儿科', label: '儿科' },
-  { value: '妇产科', label: '妇产科' },
-  { value: '眼科', label: '眼科' }
-]);
+const departments = ref<DepartmentDTO[]>([]);
 
 const doctors = ref<DoctorDTO[]>([]);
 const availableDoctors = ref<DoctorDTO[]>([]);
 
 const registrationForm = ref<RegistrationForm>({
-  department: '',
+  department: null,
   doctorId: null,
   appointmentTime: null,
   notes: '',
@@ -219,7 +213,7 @@ const formatDate = (date: Date) => {
 
 // 监听科室变化，加载对应科室的医生
 watch(() => registrationForm.value.department, async (newDepartment) => {
-  if (newDepartment) {
+  if (typeof newDepartment === 'number' && !Number.isNaN(newDepartment)) {
     try {
       console.log('正在加载科室医生:', newDepartment);
       const response = await doctorApi.getDoctorsByDepartment(newDepartment);
@@ -296,22 +290,6 @@ const canRegister = computed(() => {
          registrationForm.value.patientPhone;
 });
 
-// 时间选择器配置
-const timeShortcuts = [
-  {
-    text: '今天',
-    value: new Date()
-  },
-  {
-    text: '明天',
-    value: new Date(Date.now() + 3600 * 1000 * 24)
-  },
-  {
-    text: '一周后',
-    value: new Date(Date.now() + 3600 * 1000 * 24 * 7)
-  }
-];
-
 const disabledDate = (time: Date) => {
   return time.getTime() < Date.now() - 3600 * 1000 * 24;
 };
@@ -365,7 +343,7 @@ const handleRegistration = async () => {
       
       // 重置表单
       registrationForm.value = {
-        department: '',
+        department: null,
         doctorId: null,
         appointmentTime: null,
         notes: '',
@@ -448,6 +426,24 @@ const loadAllDoctors = async () => {
   }
 };
 
+const loadDepartments = async () => {
+  try {
+    loading.value = true;
+    const response = await departmentApi.getAll();
+    if (response.code === 200) {
+      departments.value = response.data || [];
+    } else {
+      ElMessage.error('加载科室失败: ' + (response.message || '未知错误'));
+    }
+  } catch (error) {
+    console.error('加载科室异常:', error);
+    const errorMessage = error instanceof Error ? error.message : '网络错误';
+    ElMessage.error('加载科室失败: ' + errorMessage);
+  } finally {
+    loading.value = false;
+  }
+};
+
 const handleLogout = () => {
   auth.logout();
   router.push('/login');
@@ -456,7 +452,7 @@ const handleLogout = () => {
 
 // 初始化加载数据
 onMounted(async () => {
-  await Promise.all([loadAppointments(), loadAllDoctors()]);
+  await Promise.all([loadDepartments(), loadAppointments(), loadAllDoctors()]);
 });
 </script>
 
@@ -466,62 +462,71 @@ onMounted(async () => {
   max-width: 1200px;
   margin: 0 auto;
   min-height: 100vh;
-  background-color: #f5f7fa;
+  background: linear-gradient(135deg, #f5f7fa 0%, #e8f0fe 100%);
 }
 
 .header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 30px;
-  padding: 20px;
+  margin-bottom: 28px;
+  padding: 24px 32px;
   background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  border-radius: 12px;
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.08);
 }
 
 .header h1 {
-  color: #303133;
   margin: 0;
-  font-size: 24px;
+  font-size: 26px;
   font-weight: 600;
+  color: #303133;
 }
 
 .user-info {
   display: flex;
   align-items: center;
-  gap: 15px;
-  font-size: 14px;
+  gap: 16px;
+  font-size: 15px;
   color: #606266;
+  font-weight: 500;
 }
 
 .main-content {
   display: grid;
-  gap: 30px;
+  gap: 24px;
 }
 
 .registration-section,
 .appointments-section {
   background: white;
-  padding: 24px;
-  border-radius: 8px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  padding: 28px;
+  border-radius: 12px;
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.06);
+  transition: box-shadow 0.3s ease;
+}
+
+.registration-section:hover,
+.appointments-section:hover {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
 }
 
 .registration-section h2,
 .appointments-section h2 {
   color: #303133;
-  margin-bottom: 20px;
-  font-size: 18px;
+  margin: 0 0 24px 0;
+  font-size: 20px;
   font-weight: 600;
-  border-bottom: 2px solid #409eff;
-  padding-bottom: 8px;
+  border-bottom: 3px solid #67c23a;
+  padding-bottom: 12px;
+  display: inline-block;
 }
 
 .registration-card {
-  max-width: 600px;
+  max-width: 650px;
   border: none;
   box-shadow: none;
+  padding: 0;
 }
 
 .notes-text {
@@ -545,12 +550,18 @@ onMounted(async () => {
 :deep(.el-form-item__label) {
   font-weight: 500;
   color: #606266;
+  font-size: 14px;
+}
+
+:deep(.el-form-item) {
+  margin-bottom: 22px;
 }
 
 :deep(.el-table) {
-  margin-top: 10px;
+  margin-top: 16px;
   border-radius: 8px;
   overflow: hidden;
+  font-size: 14px;
 }
 
 :deep(.el-table__header) {
@@ -561,32 +572,52 @@ onMounted(async () => {
   background-color: #f5f7fa !important;
   color: #606266;
   font-weight: 600;
+  font-size: 14px;
+  padding: 14px 0;
+}
+
+:deep(.el-table td) {
+  padding: 14px 0;
+  font-size: 14px;
+}
+
+:deep(.el-table__row:hover) {
+  background-color: #f0f9ff;
+}
+
+:deep(.el-button) {
+  border-radius: 6px;
+  font-weight: 500;
+  padding: 10px 20px;
+  font-size: 14px;
+  transition: all 0.3s ease;
 }
 
 :deep(.el-button--primary) {
-  background: linear-gradient(135deg, #409eff, #66b1ff);
+  background: linear-gradient(135deg, #67c23a, #85ce61);
   border: none;
-  border-radius: 6px;
-  font-weight: 500;
 }
 
 :deep(.el-button--primary:hover) {
-  background: linear-gradient(135deg, #66b1ff, #409eff);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.3);
+  background: linear-gradient(135deg, #85ce61, #67c23a);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(103, 194, 58, 0.3);
 }
 
 :deep(.el-button--danger) {
   background: linear-gradient(135deg, #f56c6c, #f78989);
   border: none;
-  border-radius: 6px;
-  font-weight: 500;
 }
 
 :deep(.el-button--danger:hover) {
   background: linear-gradient(135deg, #f78989, #f56c6c);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(245, 108, 108, 0.3);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(245, 108, 108, 0.3);
+}
+
+:deep(.el-button--small) {
+  padding: 7px 14px;
+  font-size: 13px;
 }
 
 :deep(.el-select),
@@ -595,9 +626,22 @@ onMounted(async () => {
   width: 100%;
 }
 
+:deep(.el-select .el-input__wrapper),
+:deep(.el-input__wrapper),
+:deep(.el-date-editor .el-input__wrapper) {
+  border-radius: 6px;
+  font-size: 14px;
+}
+
 :deep(.el-tag) {
   border-radius: 12px;
   font-weight: 500;
+  padding: 4px 12px;
+  font-size: 13px;
+}
+
+:deep(.el-card) {
+  border-radius: 8px;
 }
 
 .loading-overlay {
@@ -609,13 +653,18 @@ onMounted(async () => {
 
 @media (max-width: 768px) {
   .patient-dashboard {
-    padding: 10px;
+    padding: 12px;
   }
   
   .header {
     flex-direction: column;
-    gap: 15px;
-    text-align: center;
+    gap: 16px;
+    padding: 20px;
+  }
+  
+  .registration-section,
+  .appointments-section {
+    padding: 20px;
   }
   
   .registration-card {
@@ -623,7 +672,12 @@ onMounted(async () => {
   }
   
   :deep(.el-table) {
-    font-size: 12px;
+    font-size: 13px;
+  }
+  
+  :deep(.el-table th),
+  :deep(.el-table td) {
+    padding: 10px 0;
   }
 }
 </style>

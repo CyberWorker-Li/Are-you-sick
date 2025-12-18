@@ -3,7 +3,7 @@
     <div class="header">
       <h1>医生工作台</h1>
       <div class="user-info">
-        <span>欢迎，{{ userEmail }}</span>
+        <span>{{ userGreeting }}</span>
         <el-button type="danger" size="small" @click="handleLogout">退出登录</el-button>
       </div>
     </div>
@@ -126,7 +126,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { useAuthStore } from '../stores/auth';
@@ -134,8 +134,7 @@ import doctorDashboardApi from '../api/doctorDashboard';
 
 const router = useRouter();
 const auth = useAuthStore();
-
-const userEmail = ref(auth.userInfo?.name || '医生');
+const userGreeting = computed(() => auth.greetingText);
 const doctorId = ref(auth.userInfo?.id || 0);
 const activeTab = ref('schedules');
 const loading = ref(false);
@@ -343,39 +342,217 @@ onMounted(async () => {
   max-width: 1400px;
   margin: 0 auto;
   min-height: 100vh;
-  background-color: #f5f7fa;
+  background: linear-gradient(135deg, #f5f7fa 0%, #e8f0fe 100%);
 }
 
 .header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 30px;
-  padding: 20px;
+  margin-bottom: 24px;
+  padding: 24px 32px;
   background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  border-radius: 12px;
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.08);
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 15px;
+  color: #606266;
+  font-weight: 500;
 }
 
 .section {
   background: white;
-  padding: 24px;
-  border-radius: 8px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  padding: 28px;
+  border-radius: 12px;
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.06);
+}
+
+.section h2 {
+  margin: 0 0 20px 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: #303133;
+  padding-bottom: 12px;
+  border-bottom: 2px solid #e4e7ed;
 }
 
 .section-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
+}
+
+.section-header h2 {
+  margin: 0;
+  border-bottom: none;
+  padding-bottom: 0;
 }
 
 .main-tabs {
   background: white;
-  padding: 20px;
+  padding: 24px;
+  border-radius: 12px;
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.08);
+}
+
+.main-tabs :deep(.el-tabs__header) {
+  margin-bottom: 24px;
+}
+
+.main-tabs :deep(.el-tabs__item) {
+  font-size: 15px;
+  font-weight: 500;
+  padding: 0 24px;
+  height: 48px;
+  line-height: 48px;
+}
+
+.main-tabs :deep(.el-tabs__item.is-active) {
+  color: #409eff;
+  font-weight: 600;
+}
+
+.main-tabs :deep(.el-tabs__active-bar) {
+  height: 3px;
+  background: linear-gradient(90deg, #409eff, #66b1ff);
+}
+
+:deep(.el-table) {
   border-radius: 8px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  font-size: 14px;
+}
+
+:deep(.el-table th) {
+  background-color: #f5f7fa !important;
+  color: #606266;
+  font-weight: 600;
+  font-size: 14px;
+  padding: 14px 0;
+}
+
+:deep(.el-table td) {
+  padding: 14px 0;
+  font-size: 14px;
+}
+
+:deep(.el-table__row:hover) {
+  background-color: #f0f9ff;
+}
+
+:deep(.el-button) {
+  border-radius: 6px;
+  font-weight: 500;
+  padding: 9px 18px;
+  font-size: 14px;
+  transition: all 0.3s ease;
+}
+
+:deep(.el-button--primary) {
+  background: linear-gradient(135deg, #409eff, #66b1ff);
+  border: none;
+}
+
+:deep(.el-button--primary:hover) {
+  background: linear-gradient(135deg, #66b1ff, #409eff);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(64, 158, 255, 0.3);
+}
+
+:deep(.el-button--danger) {
+  background: linear-gradient(135deg, #f56c6c, #f78989);
+  border: none;
+}
+
+:deep(.el-button--danger:hover) {
+  background: linear-gradient(135deg, #f78989, #f56c6c);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(245, 108, 108, 0.3);
+}
+
+:deep(.el-button--small) {
+  padding: 7px 14px;
+  font-size: 13px;
+}
+
+:deep(.el-tag) {
+  border-radius: 12px;
+  font-weight: 500;
+  padding: 4px 12px;
+  font-size: 13px;
+}
+
+:deep(.el-date-editor) {
+  border-radius: 6px;
+}
+
+:deep(.el-dialog) {
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+}
+
+:deep(.el-dialog__header) {
+  padding: 24px 24px 16px;
+  border-bottom: 1px solid #e4e7ed;
+}
+
+:deep(.el-dialog__title) {
+  font-size: 18px;
+  font-weight: 600;
+  color: #303133;
+}
+
+:deep(.el-dialog__body) {
+  padding: 24px;
+}
+
+:deep(.el-form-item__label) {
+  font-weight: 500;
+  color: #606266;
+  font-size: 14px;
+}
+
+:deep(.el-select),
+:deep(.el-input) {
+  font-size: 14px;
+}
+
+:deep(.el-select .el-input__wrapper),
+:deep(.el-input__wrapper) {
+  border-radius: 6px;
+}
+
+@media (max-width: 768px) {
+  .doctor-dashboard {
+    padding: 12px;
+  }
+
+  .header {
+    flex-direction: column;
+    gap: 16px;
+    padding: 20px;
+  }
+
+  .main-tabs {
+    padding: 16px;
+  }
+
+  .section {
+    padding: 20px;
+  }
 }
 </style>
 
