@@ -10,7 +10,7 @@ echo.
 echo 2. 等待3秒后启动前端服务器...
 timeout /t 3 /nobreak >nul
 
-cd /d "C:\Users\19255\Desktop\AreYouSick\Are-you-sick-main\untitled5"
+cd /d "C:\Users\19255\Desktop\AreYouSick\Are-you-sick-main\Are you sick?"
 start "前端服务器" cmd /k "npm run dev"
 
 echo.

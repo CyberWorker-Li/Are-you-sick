@@ -1136,7 +1136,7 @@ onMounted(async () => {
   max-width: 1400px;
   margin: 0 auto;
   min-height: 100vh;
-  background-color: #f5f7fa;
+  background-color: #3675d3;
 }
 
 .dashboard-header {
