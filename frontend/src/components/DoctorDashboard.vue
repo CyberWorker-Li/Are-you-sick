@@ -33,37 +33,46 @@
           <div class="section-header">
             <h2>就诊队列</h2>
             <el-date-picker
-              v-model="selectedQueueTime"
-              type="datetime"
-              placeholder="选择时间段"
-              @change="handleQueueTimeChange"
+              v-model="selectedQueueDate"
+              type="date"
+              placeholder="选择日期"
+              @change="handleQueueDateChange"
             />
           </div>
-          <el-table :data="queue" v-loading="loading" style="width: 100%">
-            <el-table-column prop="queuePosition" label="排队位置" width="100">
+          <el-table :data="queue" v-loading="loading" style="width: 100%" table-layout="auto">
+            <el-table-column prop="queuePosition" label="排队位置" min-width="130">
               <template #default="scope">
                 <el-tag>前面还有 {{ scope.row.queuePosition }} 人</el-tag>
               </template>
             </el-table-column>
-            <el-table-column prop="patientName" label="患者姓名" width="120" />
-            <el-table-column prop="patientPhone" label="手机号" width="150" />
-            <el-table-column prop="appointmentTime" label="预约时间" width="180">
+            <el-table-column prop="patientName" label="患者姓名" min-width="140" show-overflow-tooltip />
+            <el-table-column prop="patientPhone" label="手机号" min-width="160" show-overflow-tooltip />
+            <el-table-column prop="appointmentTime" label="预约时间" min-width="210">
               <template #default="scope">
                 {{ new Date(scope.row.appointmentTime).toLocaleString() }}
               </template>
             </el-table-column>
-            <el-table-column prop="status" label="状态" width="100">
+            <el-table-column prop="status" label="状态" min-width="120">
               <template #default="scope">
                 <el-tag :type="getStatusType(scope.row.status)">{{ getStatusText(scope.row.status) }}</el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="150">
+            <el-table-column label="操作" min-width="200" align="center">
               <template #default="scope">
-                <el-button 
-                  size="small" 
-                  type="primary" 
-                  @click="sendReminder(scope.row)"
-                >发送提醒</el-button>
+                <div class="queue-actions">
+                  <el-button
+                    v-if="scope.row.status === 'PENDING'"
+                    size="small"
+                    type="success"
+                    @click="confirmAppointment(scope.row)"
+                  >确认</el-button>
+                  <el-button
+                    size="small"
+                    :type="isReminded(scope.row) ? 'info' : 'primary'"
+                    :disabled="isReminded(scope.row)"
+                    @click="sendReminder(scope.row)"
+                  >{{ isReminded(scope.row) ? '已提醒' : '发送提醒' }}</el-button>
+                </div>
               </template>
             </el-table-column>
           </el-table>
@@ -126,11 +135,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { useAuthStore } from '../stores/auth';
 import doctorDashboardApi from '../api/doctorDashboard';
+import appointmentApi from '../api/appointment';
 
 const router = useRouter();
 const auth = useAuthStore();
@@ -142,10 +152,18 @@ const loading = ref(false);
 const schedules = ref<any[]>([]);
 const queue = ref<any[]>([]);
 const myAdjustmentRequests = ref<any[]>([]);
-const selectedQueueTime = ref<Date | null>(null);
+const selectedQueueDate = ref<Date | null>(null);
+const remindedAppointmentIds = ref<Set<number>>(new Set());
 
 const showAdjustmentDialog = ref(false);
-const adjustmentForm = ref({
+interface AdjustmentFormModel {
+  dayOfWeek: string;
+  startTime: Date | null;
+  endTime: Date | null;
+  reason: string;
+}
+
+const adjustmentForm = ref<AdjustmentFormModel>({
   dayOfWeek: '',
   startTime: null,
   endTime: null,
@@ -166,27 +184,43 @@ const loadSchedules = async () => {
   }
 };
 
+const toStartOfDay = (date: Date) => {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
+
+const getNearestFutureQueueDate = () => {
+  const candidates: Date[] = [];
+  for (const schedule of schedules.value) {
+    const nextOccurrence = computeNextOccurrenceDate(schedule);
+    if (nextOccurrence) candidates.push(toStartOfDay(nextOccurrence));
+  }
+  if (candidates.length === 0) return toStartOfDay(new Date());
+  candidates.sort((a, b) => a.getTime() - b.getTime());
+  return candidates[0] ?? toStartOfDay(new Date());
+};
+
 const loadQueue = async (options: { autoSelect?: boolean } = {}) => {
-  const shouldAutoSelect = options.autoSelect || !selectedQueueTime.value;
+  const shouldAutoSelect = options.autoSelect || !selectedQueueDate.value;
+  if (shouldAutoSelect) {
+    selectedQueueDate.value = getNearestFutureQueueDate();
+  }
 
   try {
     loading.value = true;
-    const timeStr = !shouldAutoSelect && selectedQueueTime.value
-      ? selectedQueueTime.value.toISOString()
+    const timeStr = selectedQueueDate.value
+      ? toStartOfDay(selectedQueueDate.value).toISOString()
       : undefined;
     const response = await doctorDashboardApi.getAppointmentQueue(doctorId.value, timeStr);
     if (response.code === 200) {
       queue.value = response.data || [];
-      if (queue.value.length > 0) {
-        const firstTime = queue.value[0].appointmentTime;
-        if (firstTime) {
-          const firstDate = new Date(firstTime);
-          if (shouldAutoSelect || !selectedQueueTime.value) {
-            selectedQueueTime.value = firstDate;
-          }
-        }
-      } else if (shouldAutoSelect) {
-        selectedQueueTime.value = null;
+      const currentIds = new Set<number>();
+      for (const item of queue.value) {
+        if (typeof item?.appointmentId === 'number') currentIds.add(item.appointmentId);
+      }
+      for (const existingId of Array.from(remindedAppointmentIds.value)) {
+        if (!currentIds.has(existingId)) remindedAppointmentIds.value.delete(existingId);
       }
     }
   } catch (error) {
@@ -196,8 +230,8 @@ const loadQueue = async (options: { autoSelect?: boolean } = {}) => {
   }
 };
 
-const handleQueueTimeChange = () => {
-  loadQueue();
+const handleQueueDateChange = () => {
+  loadQueue({ autoSelect: false });
 };
 
 const loadAdjustmentRequests = async () => {
@@ -215,11 +249,32 @@ const loadAdjustmentRequests = async () => {
 };
 
 const sendReminder = async (appointment: any) => {
+  const appointmentId = appointment?.appointmentId;
+  if (typeof appointmentId !== 'number') return;
+  if (remindedAppointmentIds.value.has(appointmentId)) return;
+
   try {
-    await doctorDashboardApi.sendAppointmentReminder(appointment.appointmentId);
+    await doctorDashboardApi.sendAppointmentReminder(appointmentId);
+    remindedAppointmentIds.value.add(appointmentId);
     ElMessage.success('提醒发送成功');
   } catch (error: any) {
     ElMessage.error(error.response?.data?.message || '发送失败');
+  }
+};
+
+const isReminded = (appointment: any) => {
+  const appointmentId = appointment?.appointmentId;
+  if (typeof appointmentId !== 'number') return false;
+  return remindedAppointmentIds.value.has(appointmentId);
+};
+
+const confirmAppointment = async (appointment: any) => {
+  try {
+    await appointmentApi.confirmAppointment(appointment.appointmentId);
+    ElMessage.success('已确认挂号');
+    await loadQueue({ autoSelect: false });
+  } catch (error: any) {
+    ElMessage.error(error.response?.data?.message || '确认失败');
   }
 };
 
@@ -292,10 +347,10 @@ const viewQueue = (schedule: any) => {
   activeTab.value = 'queue';
   const targetDate = computeNextOccurrenceDate(schedule);
   if (targetDate) {
-    selectedQueueTime.value = targetDate;
+    selectedQueueDate.value = toStartOfDay(targetDate);
     loadQueue({ autoSelect: false });
   } else {
-    selectedQueueTime.value = null;
+    selectedQueueDate.value = null;
     loadQueue({ autoSelect: true });
   }
 };
@@ -334,6 +389,16 @@ onMounted(async () => {
   await loadSchedules();
   await loadAdjustmentRequests();
 });
+
+watch(
+  activeTab,
+  async (nextTab) => {
+    if (nextTab === 'queue') {
+      await loadQueue({ autoSelect: true });
+    }
+  },
+  { immediate: false }
+);
 </script>
 
 <style scoped>
@@ -497,6 +562,14 @@ onMounted(async () => {
 
 :deep(.el-date-editor) {
   border-radius: 6px;
+}
+
+.queue-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 :deep(.el-dialog) {

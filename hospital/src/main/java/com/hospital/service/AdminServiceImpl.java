@@ -82,7 +82,7 @@ public class AdminServiceImpl implements AdminService {
 
     @Override
     @Transactional
-    public DoctorDTO updateDoctor(Long doctorId, CreateDoctorRequest request) {
+    public DoctorDTO updateDoctor(Long doctorId, UpdateDoctorRequest request) {
         Doctor doctor = doctorRepository.findById(doctorId)
                 .orElseThrow(() -> new RuntimeException("医生不存在"));
         
@@ -101,27 +101,50 @@ public class AdminServiceImpl implements AdminService {
         if (request.getTitle() != null) {
             doctor.setTitle(request.getTitle());
         }
-        
-        // 如果提供了新邮箱，更新用户邮箱
-        if (request.getEmail() != null && !request.getEmail().isEmpty()) {
-            User user = userRepository.findById(doctor.getUserId())
-                    .orElseThrow(() -> new RuntimeException("用户不存在"));
-            
-            if (!user.getEmail().equals(request.getEmail())) {
-                if (userRepository.existsByEmail(request.getEmail())) {
+
+        final String newEmail = request.getEmail() != null ? request.getEmail().trim() : "";
+        final String newPassword = request.getPassword() != null ? request.getPassword().trim() : "";
+
+        // 账号绑定/更新逻辑：
+        // 1) 若医生未绑定 user 账号：需要同时提供邮箱+密码，自动创建账号并绑定。
+        // 2) 若已绑定：邮箱/密码任一提供则更新。
+        if (doctor.getUserId() == null) {
+            if (!newEmail.isEmpty() || !newPassword.isEmpty()) {
+                if (newEmail.isEmpty() || newPassword.isEmpty()) {
+                    throw new RuntimeException("该医生尚未绑定账号，请同时填写邮箱和密码以创建账号");
+                }
+                if (userRepository.existsByEmail(newEmail)) {
                     throw new RuntimeException("该邮箱已被注册");
                 }
-                user.setEmail(request.getEmail());
+
+                User user = new User();
+                user.setEmail(newEmail);
+                user.setPassword(passwordEncoder.encode(newPassword));
+                user.setRole(UserRole.DOCTOR);
+                user.setStatus(1);
+                User savedUser = userRepository.save(user);
+                doctor.setUserId(savedUser.getId());
+            }
+        } else {
+            if (!newEmail.isEmpty()) {
+                User user = userRepository.findById(doctor.getUserId())
+                        .orElseThrow(() -> new RuntimeException("用户不存在"));
+
+                if (!user.getEmail().equals(newEmail)) {
+                    if (userRepository.existsByEmail(newEmail)) {
+                        throw new RuntimeException("该邮箱已被注册");
+                    }
+                    user.setEmail(newEmail);
+                    userRepository.save(user);
+                }
+            }
+
+            if (!newPassword.isEmpty()) {
+                User user = userRepository.findById(doctor.getUserId())
+                        .orElseThrow(() -> new RuntimeException("用户不存在"));
+                user.setPassword(passwordEncoder.encode(newPassword));
                 userRepository.save(user);
             }
-        }
-        
-        // 如果提供了新密码，更新密码
-        if (request.getPassword() != null && !request.getPassword().isEmpty()) {
-            User user = userRepository.findById(doctor.getUserId())
-                    .orElseThrow(() -> new RuntimeException("用户不存在"));
-            user.setPassword(passwordEncoder.encode(request.getPassword()));
-            userRepository.save(user);
         }
         
         Doctor updatedDoctor = doctorRepository.save(doctor);
@@ -153,7 +176,10 @@ public class AdminServiceImpl implements AdminService {
         
         // 删除排班
         scheduleRepository.deleteByDoctorId(doctorId);
-        
+
+        // 删除相关的排班调整申请，避免残留脏数据导致管理端加载失败
+        adjustmentRequestRepository.deleteByDoctorId(doctorId);
+
         // 删除医生
         doctorRepository.delete(doctor);
         
@@ -368,6 +394,8 @@ public class AdminServiceImpl implements AdminService {
                     .orElse(null);
             if (doctor != null) {
                 dto.setDoctorName(doctor.getName());
+            } else {
+                dto.setDoctorName("已删除医生");
             }
         } catch (Exception e) {
             // 忽略错误

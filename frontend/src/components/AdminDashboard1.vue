@@ -185,7 +185,7 @@
               </div>
               <el-table :data="schedules" v-loading="loadingSchedules" style="width: 100%">
                 <el-table-column prop="doctorName" label="医生" width="140" />
-                <el-table-column prop="dayOfWeek" label="星期" width="100" />
+                <el-table-column prop="dayOfWeek" label="星期" width="160" class-name="weekday-col" />
                 <el-table-column prop="startTime" label="开始时间" width="120" />
                 <el-table-column prop="endTime" label="结束时间" width="120" />
                 <el-table-column prop="maxPatients" label="最大人数" width="120" />
@@ -214,7 +214,7 @@
               <h2>排班调整申请</h2>
               <el-table :data="adjustmentRequests" v-loading="loadingAdjustments" style="width: 100%">
                 <el-table-column prop="doctorName" label="医生" width="140" />
-                <el-table-column prop="dayOfWeek" label="星期" width="100" />
+                <el-table-column prop="dayOfWeek" label="星期" width="160" class-name="weekday-col" />
                 <el-table-column prop="startTime" label="开始时间" width="120" />
                 <el-table-column prop="endTime" label="结束时间" width="120" />
                 <el-table-column prop="reason" label="申请原因" min-width="220" show-overflow-tooltip />
@@ -316,7 +316,7 @@
               <el-card class="stats-card" shadow="hover">
                 <template #header>
                   <div class="card-header">
-                    <span>每日预约走势</span>
+                    <span>每日预约情况</span>
                     <span class="card-subtitle">按日期统计预约状态</span>
                   </div>
                 </template>
@@ -386,6 +386,143 @@
         </el-tabs>
       </div>
     </section>
+
+    <el-dialog
+      v-model="showDepartmentDialog"
+      :title="editingDepartment ? '编辑科室' : '添加科室'"
+      width="560px"
+      @close="closeDepartmentDialog"
+    >
+      <el-form :model="departmentForm" label-width="90px">
+        <el-form-item label="科室名称" required>
+          <el-input v-model="departmentForm.name" placeholder="请输入科室名称" />
+        </el-form-item>
+        <el-form-item label="职能内容">
+          <el-input
+            v-model="departmentForm.description"
+            type="textarea"
+            :rows="3"
+            placeholder="请输入科室职能内容"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="closeDepartmentDialog">取消</el-button>
+        <el-button type="primary" :loading="departmentSubmitting" @click="saveDepartment">确认</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="showDepartmentDetail" title="科室医生" width="760px">
+      <div style="margin-bottom: 12px; font-weight: 600; color: #303133;">
+        {{ currentDepartment?.name || '科室' }}
+      </div>
+      <el-table :data="selectedDepartmentDoctors" style="width: 100%" empty-text="暂无医生">
+        <el-table-column prop="id" label="ID" width="80" />
+        <el-table-column prop="name" label="姓名" width="140" />
+        <el-table-column prop="title" label="职称" width="140" />
+        <el-table-column prop="phone" label="手机号" width="160" />
+      </el-table>
+      <template #footer>
+        <el-button @click="showDepartmentDetail = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog
+      v-model="showCreateDoctorDialog"
+      :title="editingDoctor ? '编辑医生' : '添加医生'"
+      width="640px"
+    >
+      <el-form :model="doctorForm" label-width="90px">
+        <el-form-item label="姓名" required>
+          <el-input v-model="doctorForm.name" placeholder="请输入医生姓名" />
+        </el-form-item>
+        <el-form-item label="科室" required>
+          <el-select v-model="doctorForm.departmentId" placeholder="请选择科室" style="width: 100%">
+            <el-option
+              v-for="dept in departments"
+              :key="dept.id"
+              :label="dept.name"
+              :value="dept.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="职称">
+          <el-input v-model="doctorForm.title" placeholder="如：主任医师" />
+        </el-form-item>
+        <el-form-item label="手机号">
+          <el-input v-model="doctorForm.phone" placeholder="请输入手机号" />
+        </el-form-item>
+        <el-form-item v-if="!editingDoctor" label="邮箱" required>
+          <el-input v-model="doctorForm.email" placeholder="用于登录" />
+        </el-form-item>
+        <el-form-item v-if="!editingDoctor" label="密码" required>
+          <el-input v-model="doctorForm.password" show-password placeholder="用于登录" />
+        </el-form-item>
+        <el-form-item v-if="editingDoctor" label="邮箱">
+          <el-input v-model="doctorForm.email" placeholder="留空则不修改" />
+        </el-form-item>
+        <el-form-item v-if="editingDoctor" label="密码">
+          <el-input v-model="doctorForm.password" show-password placeholder="留空则不修改" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showCreateDoctorDialog = false">取消</el-button>
+        <el-button type="primary" @click="saveDoctor">确认</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog
+      v-model="showCreateScheduleDialog"
+      :title="editingSchedule ? '编辑排班' : '添加排班'"
+      width="560px"
+    >
+      <el-form :model="scheduleForm" label-width="90px">
+        <el-form-item label="医生" required>
+          <el-select v-model="scheduleForm.doctorId" placeholder="请选择医生" style="width: 100%">
+            <el-option
+              v-for="doc in doctors"
+              :key="doc.id"
+              :label="doc.name"
+              :value="doc.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="星期" required>
+          <el-select v-model="scheduleForm.dayOfWeek" placeholder="请选择星期" style="width: 100%">
+            <el-option label="周一" value="MONDAY" />
+            <el-option label="周二" value="TUESDAY" />
+            <el-option label="周三" value="WEDNESDAY" />
+            <el-option label="周四" value="THURSDAY" />
+            <el-option label="周五" value="FRIDAY" />
+            <el-option label="周六" value="SATURDAY" />
+            <el-option label="周日" value="SUNDAY" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="开始时间" required>
+          <el-time-picker
+            v-model="scheduleForm.startTime"
+            placeholder="开始时间"
+            format="HH:mm"
+            value-format="HH:mm"
+          />
+        </el-form-item>
+        <el-form-item label="结束时间" required>
+          <el-time-picker
+            v-model="scheduleForm.endTime"
+            placeholder="结束时间"
+            format="HH:mm"
+            value-format="HH:mm"
+          />
+        </el-form-item>
+        <el-form-item label="最大人数" required>
+          <el-input-number v-model="scheduleForm.maxPatients" :min="1" :max="200" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showCreateScheduleDialog = false">取消</el-button>
+        <el-button type="primary" @click="saveSchedule">确认</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -394,7 +531,7 @@ import { ref, reactive, onMounted, watch, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { useAuthStore } from '../stores/auth';
-import adminApi, { type CreateDoctorRequest, type CreateScheduleRequest } from '../api/admin';
+import adminApi, { type CreateDoctorRequest, type CreateScheduleRequest, type UpdateDoctorRequest } from '../api/admin';
 import departmentApi, { type DepartmentRequest } from '../api/department';
 import {
   UserFilled,
@@ -832,8 +969,8 @@ const saveDoctor = async () => {
       }
     }
 
-    const buildDoctorPayload = (isEdit: boolean): CreateDoctorRequest => {
-      const payload: CreateDoctorRequest = {
+    const buildDoctorPayload = (isEdit: boolean): CreateDoctorRequest | UpdateDoctorRequest => {
+      const payload: any = {
         name: doctorForm.value.name.trim(),
         departmentId: doctorForm.value.departmentId!,
         phone: doctorForm.value.phone.trim() ? doctorForm.value.phone.trim() : undefined,
@@ -856,10 +993,10 @@ const saveDoctor = async () => {
     };
 
     if (editingDoctor.value) {
-      await adminApi.updateDoctor(editingDoctor.value.id, buildDoctorPayload(true));
+      await adminApi.updateDoctor(editingDoctor.value.id, buildDoctorPayload(true) as UpdateDoctorRequest);
       ElMessage.success('更新医生成功');
     } else {
-      await adminApi.createDoctor(buildDoctorPayload(false));
+      await adminApi.createDoctor(buildDoctorPayload(false) as CreateDoctorRequest);
       ElMessage.success('创建医生成功');
     }
     showCreateDoctorDialog.value = false;
@@ -926,23 +1063,35 @@ const closeDepartmentDialog = () => {
 
 const saveDepartment = async () => {
   if (departmentSubmitting.value) return;
-  if (!departmentForm.name.trim()) {
+
+  const trimmedName = departmentForm.name.trim();
+
+  if (!trimmedName) {
     ElMessage.warning('请填写科室名称');
     return;
   }
+
+  if (!editingDepartment.value) {
+    const normalizedName = trimmedName.toLowerCase();
+    const hasDuplicate = departments.value.some(
+      dept => dept.name.trim().toLowerCase() === normalizedName
+    );
+    if (hasDuplicate) {
+      ElMessage.warning('科室已存在');
+      return;
+    }
+  }
   try {
     departmentSubmitting.value = true;
+    const payload = {
+      name: trimmedName,
+      description: departmentForm.description?.trim()
+    };
     if (editingDepartment.value) {
-      await departmentApi.update(editingDepartment.value.id, {
-        name: departmentForm.name.trim(),
-        description: departmentForm.description?.trim()
-      });
+      await departmentApi.update(editingDepartment.value.id, payload);
       ElMessage.success('更新科室成功');
     } else {
-      await departmentApi.create({
-        name: departmentForm.name.trim(),
-        description: departmentForm.description?.trim()
-      });
+      await departmentApi.create(payload);
       ElMessage.success('创建科室成功');
     }
     closeDepartmentDialog();
@@ -1054,8 +1203,8 @@ const editSchedule = (schedule: any) => {
   scheduleForm.value = {
     doctorId: schedule.doctorId,
     dayOfWeek: schedule.dayOfWeek,
-    startTime: schedule.startTime,
-    endTime: schedule.endTime,
+    startTime: formatTimeValue(schedule.startTime),
+    endTime: formatTimeValue(schedule.endTime),
     maxPatients: schedule.maxPatients
   };
   showCreateScheduleDialog.value = true;
@@ -1465,5 +1614,8 @@ onMounted(async () => {
 .stats-card :deep(.el-table__row:hover) {
   background-color: #f0f9ff;
 }
-</style>
 
+.admin-dashboard :deep(.weekday-col .cell) {
+  white-space: nowrap;
+}
+</style>

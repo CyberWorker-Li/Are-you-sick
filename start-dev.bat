@@ -3,8 +3,8 @@ echo 启动医院挂号系统开发环境...
 
 echo.
 echo 1. 启动后端服务器...
-cd /d "C:\Users\19255\Desktop\AreYouSick\Are-you-sick-main\hospital"
-start "后端服务器" cmd /k "mvnw spring-boot:run"
+cd /d "C:\Users\19255\Desktop\AreYouSick\Are-you-sick-main\hospital\target"
+start "后端服务器" cmd /k "java -jar HospitalApplication-0.0.1-SNAPSHOT.jar"
 
 echo.
 echo 2. 等待3秒后启动前端服务器...

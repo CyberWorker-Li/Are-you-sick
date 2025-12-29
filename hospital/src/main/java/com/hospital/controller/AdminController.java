@@ -5,6 +5,7 @@ import com.hospital.service.AdminService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import jakarta.validation.Valid;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -19,7 +20,7 @@ public class AdminController {
     // ========== 医生信息管理 ==========
     
     @PostMapping("/doctors")
-    public ResponseEntity<ApiResponse<DoctorDTO>> createDoctor(@RequestBody CreateDoctorRequest request) {
+    public ResponseEntity<ApiResponse<DoctorDTO>> createDoctor(@Valid @RequestBody CreateDoctorRequest request) {
         try {
             DoctorDTO doctor = adminService.createDoctor(request);
             return ResponseEntity.ok(ApiResponse.success("创建医生成功", doctor));
@@ -31,7 +32,7 @@ public class AdminController {
     @PutMapping("/doctors/{doctorId}")
     public ResponseEntity<ApiResponse<DoctorDTO>> updateDoctor(
             @PathVariable Long doctorId,
-            @RequestBody CreateDoctorRequest request) {
+            @Valid @RequestBody UpdateDoctorRequest request) {
         try {
             DoctorDTO doctor = adminService.updateDoctor(doctorId, request);
             return ResponseEntity.ok(ApiResponse.success("更新医生信息成功", doctor));

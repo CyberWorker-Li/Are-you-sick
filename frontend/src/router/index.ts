@@ -54,6 +54,23 @@ const router = createRouter({
     routes
 });
 
+router.afterEach((to) => {
+  const baseTitle = 'Are you sick?';
+  const name = typeof to.name === 'string' ? to.name : '';
+
+  const suffixMap: Record<string, string> = {
+    PatientDashboard: '患者端',
+    DoctorDashboard: '医生端',
+    AdminDashboard: '管理端',
+    Login: '登录',
+    Register: '注册',
+    ResetPassword: '重置密码'
+  };
+
+  const suffix = suffixMap[name] || '';
+  document.title = suffix ? `${baseTitle} ${suffix}` : baseTitle;
+});
+
 // 添加路由守卫
 router.beforeEach(async (to, from, next) => {
   const auth = useAuthStore();

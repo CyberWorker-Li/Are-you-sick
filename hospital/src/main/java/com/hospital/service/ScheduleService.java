@@ -23,6 +23,9 @@ public interface ScheduleService {
     
     // 获取医生指定日期的可用时间段
     List<TimeSlotDTO> getAvailableTimeSlots(Long doctorId, LocalDate date);
+
+    // 获取指定科室（可选指定医生）在日期范围内有号源的日期
+    List<LocalDate> getAvailableDates(Long departmentId, Long doctorId, LocalDate startDate, LocalDate endDate);
     
     // 检查时间段是否在医生的工作时间内
     boolean isWithinWorkingHours(Long doctorId, LocalDateTime appointmentTime);

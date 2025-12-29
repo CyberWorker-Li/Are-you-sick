@@ -10,7 +10,7 @@ public interface AdminService {
     DoctorDTO createDoctor(CreateDoctorRequest request);
     
     // 更新医生信息
-    DoctorDTO updateDoctor(Long doctorId, CreateDoctorRequest request);
+    DoctorDTO updateDoctor(Long doctorId, UpdateDoctorRequest request);
     
     // 删除医生
     void deleteDoctor(Long doctorId);

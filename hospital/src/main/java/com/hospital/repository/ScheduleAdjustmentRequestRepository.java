@@ -11,10 +11,13 @@ public interface ScheduleAdjustmentRequestRepository extends JpaRepository<Sched
     
     // 根据医生ID查找申请
     List<ScheduleAdjustmentRequest> findByDoctorId(Long doctorId);
-    
+
+    // 删除某个医生的所有调整申请
+    void deleteByDoctorId(Long doctorId);
+
     // 查找待处理的申请
     List<ScheduleAdjustmentRequest> findByStatus(ScheduleAdjustmentRequest.RequestStatus status);
-    
+
     // 根据医生ID和状态查找申请
     List<ScheduleAdjustmentRequest> findByDoctorIdAndStatus(Long doctorId, ScheduleAdjustmentRequest.RequestStatus status);
 }

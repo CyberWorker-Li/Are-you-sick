@@ -9,6 +9,15 @@ export interface CreateDoctorRequest {
   password?: string;
 }
 
+export interface UpdateDoctorRequest {
+  name?: string;
+  phone?: string;
+  departmentId?: number;
+  title?: string;
+  email?: string;
+  password?: string;
+}
+
 export interface CreateScheduleRequest {
   doctorId: number;
   dayOfWeek: string;
@@ -23,7 +32,7 @@ export const adminApi = {
     return await api.post('/admin/doctors', request);
   },
 
-  updateDoctor: async (doctorId: number, request: CreateDoctorRequest) => {
+  updateDoctor: async (doctorId: number, request: UpdateDoctorRequest) => {
     return await api.put(`/admin/doctors/${doctorId}`, request);
   },
 

@@ -4,6 +4,7 @@ import com.hospital.dto.ScheduleDTO;
 import com.hospital.dto.CreateScheduleRequest;
 import com.hospital.dto.TimeSlotDTO;
 import com.hospital.entity.Schedule;
+import com.hospital.repository.DoctorRepository;
 import com.hospital.repository.ScheduleRepository;
 import com.hospital.repository.AppointmentRepository;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +27,7 @@ public class ScheduleServiceImpl implements ScheduleService {
     private final ScheduleRepository scheduleRepository;
     private final AppointmentRepository appointmentRepository;
     private final DoctorService doctorService;
+    private final DoctorRepository doctorRepository;
 
     @Override
     @Transactional
@@ -115,6 +117,64 @@ public class ScheduleServiceImpl implements ScheduleService {
         }
         
         return timeSlots;
+    }
+
+    @Override
+    public List<LocalDate> getAvailableDates(Long departmentId, Long doctorId, LocalDate startDate, LocalDate endDate) {
+        if (departmentId == null) {
+            throw new RuntimeException("科室ID不能为空");
+        }
+        if (startDate == null || endDate == null) {
+            throw new RuntimeException("日期范围不能为空");
+        }
+        if (endDate.isBefore(startDate)) {
+            throw new RuntimeException("结束日期不能早于开始日期");
+        }
+
+        final List<Long> doctorIds;
+        if (doctorId != null) {
+            doctorIds = List.of(doctorId);
+        } else {
+            doctorIds = doctorRepository.findByDepartment_Id(departmentId)
+                    .stream()
+                    .map(d -> d.getId())
+                    .collect(Collectors.toList());
+        }
+
+        if (doctorIds.isEmpty()) {
+            return List.of();
+        }
+
+        List<LocalDate> availableDates = new ArrayList<>();
+        LocalDate cursor = startDate;
+        while (!cursor.isAfter(endDate)) {
+            DayOfWeek dayOfWeek = cursor.getDayOfWeek();
+            boolean hasAvailability = false;
+
+            for (Long did : doctorIds) {
+                List<Schedule> schedules = scheduleRepository.findByDoctorIdAndDayOfWeek(did, dayOfWeek);
+                if (schedules.isEmpty()) continue;
+
+                for (Schedule schedule : schedules) {
+                    LocalDateTime startDateTime = LocalDateTime.of(cursor, schedule.getStartTime());
+                    LocalDateTime endDateTime = LocalDateTime.of(cursor, schedule.getEndTime());
+                    int currentCount = countAppointmentsInRange(did, startDateTime, endDateTime);
+                    if (currentCount < schedule.getMaxPatients()) {
+                        hasAvailability = true;
+                        break;
+                    }
+                }
+
+                if (hasAvailability) break;
+            }
+
+            if (hasAvailability) {
+                availableDates.add(cursor);
+            }
+            cursor = cursor.plusDays(1);
+        }
+
+        return availableDates;
     }
 
     @Override

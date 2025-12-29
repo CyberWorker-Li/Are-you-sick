@@ -30,5 +30,19 @@ public class ScheduleController {
             return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
         }
     }
+
+    @GetMapping("/available-dates")
+    public ResponseEntity<ApiResponse<List<LocalDate>>> getAvailableDates(
+            @RequestParam Long departmentId,
+            @RequestParam(required = false) Long doctorId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+        try {
+            List<LocalDate> dates = scheduleService.getAvailableDates(departmentId, doctorId, startDate, endDate);
+            return ResponseEntity.ok(ApiResponse.success("获取可预约日期成功", dates));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
+        }
+    }
 }
 

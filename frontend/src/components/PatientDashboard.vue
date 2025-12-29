@@ -70,6 +70,23 @@
                 :disabled-date="disabledDate"
                 @change="loadAvailableTimeSlots"
               />
+              <div v-if="registrationForm.department" class="available-dates-hint">
+                <template v-if="loadingAvailableDates">
+                  正在加载可预约日期...
+                </template>
+                <template v-else-if="availableDates.length === 0">
+                  暂无可预约日期，请尝试更换医生或稍后再试
+                </template>
+                <template v-else>
+                  可预约日期：
+                  <el-tag
+                    v-for="d in availableDates"
+                    :key="d"
+                    size="small"
+                    class="available-date-tag"
+                  >{{ d }}</el-tag>
+                </template>
+              </div>
             </el-form-item>
 
             <el-form-item label="就诊时间" v-if="availableTimeSlots.length > 0">
@@ -98,7 +115,6 @@
               <el-button 
                 type="primary" 
                 @click="handleRegistration"
-                :disabled="!canRegister"
               >
                 确认挂号
               </el-button>
@@ -203,12 +219,65 @@ const selectedDate = ref<Date | null>(null);
 const availableTimeSlots = ref<TimeSlotDTO[]>([]);
 const appointments = ref<AppointmentDTO[]>([]);
 const loading = ref(false);
+const availableDates = ref<string[]>([]);
+const availableDateSet = computed(() => new Set(availableDates.value));
+const loadingAvailableDates = ref(false);
 
 const formatDate = (date: Date) => {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+};
+
+const loadAvailableDates = async () => {
+  const departmentId = registrationForm.value.department;
+  if (typeof departmentId !== 'number' || Number.isNaN(departmentId)) {
+    availableDates.value = [];
+    return;
+  }
+
+  try {
+    loadingAvailableDates.value = true;
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 13);
+
+    const response = await scheduleApi.getAvailableDates({
+      departmentId,
+      doctorId: registrationForm.value.doctorId ?? undefined,
+      startDate: formatDate(start),
+      endDate: formatDate(end)
+    });
+
+    if (response.code === 200 && response.data) {
+      availableDates.value = (response.data as any[]).map((d) => {
+        if (typeof d === 'string') return d;
+        try {
+          return formatDate(new Date(d));
+        } catch {
+          return String(d);
+        }
+      });
+    } else {
+      availableDates.value = [];
+    }
+
+    if (selectedDate.value) {
+      const selectedStr = formatDate(selectedDate.value);
+      if (!availableDateSet.value.has(selectedStr)) {
+        selectedDate.value = null;
+        availableTimeSlots.value = [];
+        registrationForm.value.appointmentTime = null;
+      }
+    }
+  } catch (error) {
+    console.error('加载可预约日期异常:', error);
+    availableDates.value = [];
+  } finally {
+    loadingAvailableDates.value = false;
+  }
 };
 
 // 监听科室变化，加载对应科室的医生
@@ -234,6 +303,7 @@ watch(() => registrationForm.value.department, async (newDepartment) => {
     availableDoctors.value = [];
     registrationForm.value.doctorId = null;
     availableTimeSlots.value = [];
+    availableDates.value = [];
   }
 });
 
@@ -241,6 +311,14 @@ watch(() => registrationForm.value.department, async (newDepartment) => {
 watch(() => registrationForm.value.doctorId, () => {
   availableTimeSlots.value = [];
   registrationForm.value.appointmentTime = null;
+  loadAvailableDates();
+});
+
+watch(() => registrationForm.value.department, () => {
+  selectedDate.value = null;
+  registrationForm.value.appointmentTime = null;
+  availableTimeSlots.value = [];
+  loadAvailableDates();
 });
 
 // 加载可用时间段
@@ -291,7 +369,12 @@ const canRegister = computed(() => {
 });
 
 const disabledDate = (time: Date) => {
-  return time.getTime() < Date.now() - 3600 * 1000 * 24;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  if (time.getTime() < today.getTime()) return true;
+  if (!registrationForm.value.department) return true;
+  if (availableDates.value.length === 0) return true;
+  return !availableDateSet.value.has(formatDate(time));
 };
 
 const getStatusType = (status: string) => {
@@ -318,7 +401,17 @@ const getStatusText = (status: string) => {
 
 // 操作方法
 const handleRegistration = async () => {
-  if (!canRegister.value) return;
+  if (!canRegister.value) {
+    const missing: string[] = [];
+    if (!registrationForm.value.department) missing.push('科室');
+    if (!registrationForm.value.doctorId) missing.push('医生');
+    if (!selectedDate.value) missing.push('就诊日期');
+    if (!registrationForm.value.appointmentTime) missing.push('就诊时间');
+    if (!registrationForm.value.patientName) missing.push('患者姓名');
+    if (!registrationForm.value.patientPhone) missing.push('联系电话');
+    ElMessage.warning(`请先完善：${missing.join('、')}`);
+    return;
+  }
 
   try {
     loading.value = true;
@@ -638,6 +731,18 @@ onMounted(async () => {
   font-weight: 500;
   padding: 4px 12px;
   font-size: 13px;
+}
+
+.available-dates-hint {
+  margin-top: 10px;
+  color: #606266;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.available-date-tag {
+  margin-left: 8px;
+  margin-top: 6px;
 }
 
 :deep(.el-card) {
