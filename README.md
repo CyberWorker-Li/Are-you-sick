@@ -8,9 +8,10 @@ cd *\Are you sick?\hospital\target
 &&
 
 java -jar HospitalApplication-0.0.1-SNAPSHOT.jar
-
+\\
 
 或者：
+
 cd *\Are you sick?\hospital
 
 &&
